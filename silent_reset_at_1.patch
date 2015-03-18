@@ -1,0 +1,50 @@
+diff --git a/ril/sprd_libril/sprd_ril_commands.h b/ril/sprd_libril/sprd_ril_commands.h
+index a648f28..3ff64e4 100644
+--- a/ril/sprd_libril/sprd_ril_commands.h
++++ b/ril/sprd_libril/sprd_ril_commands.h
+@@ -76,7 +76,7 @@
+     {RIL_REQUEST_QUERY_CLIP, dispatchVoid, responseInts},
+     {RIL_REQUEST_LAST_DATA_CALL_FAIL_CAUSE, dispatchVoid, responseInts},
+     {RIL_REQUEST_DATA_CALL_LIST, dispatchVoid, responseDataCallList},
+-    {RIL_REQUEST_RESET_RADIO, dispatchVoid, responseVoid},
++    {RIL_REQUEST_RESET_RADIO, dispatchInts, responseVoid},
+     {RIL_REQUEST_OEM_HOOK_RAW, dispatchRaw, responseRaw},
+     {RIL_REQUEST_OEM_HOOK_STRINGS, dispatchStrings, responseStrings},
+     {RIL_REQUEST_SCREEN_STATE, dispatchInts, responseVoid},
+diff --git a/ril/sprd_ril/sprd_ril.c b/ril/sprd_ril/sprd_ril.c
+index 09188e1..e11529f 100644
+--- a/ril/sprd_ril/sprd_ril.c
++++ b/ril/sprd_ril/sprd_ril.c
+@@ -6879,7 +6879,15 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
+             }
+ 
+         case RIL_REQUEST_RESET_RADIO:
+-            requestResetRadio(channelID, t);
++			{
++				int silent_reset_radio = ((int*)data)[0];
++				if(silent_reset_radio){
++					RILLOGD("receive AT cmd to reset Modem");
++            		RIL_requestTimedCallback (silentResetModem, NULL, NULL);
++				}else{
++					requestResetRadio(channelID, t);
++				}
++			}
+             break;
+         case RIL_REQUEST_SCREEN_STATE:
+             requestScreeState(channelID, ((int*)data)[0], t);
+diff --git a/ril/sprd_rild/sprd_rild.c b/ril/sprd_rild/sprd_rild.c
+index 974d572..00d3019 100644
+--- a/ril/sprd_rild/sprd_rild.c
++++ b/ril/sprd_rild/sprd_rild.c
+@@ -186,7 +186,10 @@ OpenLib:
+     }
+ 
+     RILLOGD("Rild: rilArgv[1]=%s,rilArgv[2]=%s,rilArgv[3]=%s,rilArgv[4]=%s",rilArgv[1],rilArgv[2],rilArgv[3],rilArgv[4]);
+-    funcs = rilInit(&s_rilEnv, argc, rilArgv);
++
++	RILLOGD("RILD: @@@jh@@@\n");
++
++	funcs = rilInit(&s_rilEnv, argc, rilArgv);
+     RIL_register(funcs, argc, rilArgv);
+ 
+ done:
