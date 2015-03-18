@@ -1,0 +1,215 @@
+diff --git a/phoneserver/adapter.c b/phoneserver/adapter.c
+index 2e00a40..92af974 100644
+--- a/phoneserver/adapter.c
++++ b/phoneserver/adapter.c
+@@ -796,7 +796,11 @@ int phoneserver_deliver_at_cmd(const pty_t * pty, char *cmd, int len)
+     cmd_req.len = len;
+     cmd_req.cmd_id = item->cmd_id;
+     cmd_req.timeout = item->timeout;
++	
++	//PHS_LOGD("phoneserver@@@1 simmod=[%d] cmd %s\n", multiSimMode, cmd);
+     ret = item->cvt_func(&cmd_req);
++	//PHS_LOGD("phoneserver@@@2 simmod=[%d] cmd %s\n", multiSimMode, cmd);
++	
+     if (ret < 0) {
+         PHS_LOGD("\n phoneserver_deliver_at_cmd failed!\n");
+         adapter_pty_write_error((pty_t *)pty,CME_ERROR_NOT_SUPPORT);
+@@ -839,7 +843,11 @@ int phoneserver_deliver_at_rsp(const cmux_t * cmux, char *rsp, int len)
+         rsp_req.recv_cmux = (cmux_t *) cmux;
+         rsp_req.rsp_str = rsp;
+         rsp_req.len = len;
++
++		
++		PHS_LOGD("phoneserver_deliver_at_rsp@@@1 cmd=%s\n", rsp_req.rsp_str);
+         ret = cmux->callback(&rsp_req, cmux->userdata);
++		PHS_LOGD("phoneserver_deliver_at_rsp@@@2 cmd=%s\n", rsp_req.rsp_str);
+     } else
+         PHS_LOGE("[%d] No Callback function.\n", tid);
+ 
+@@ -848,7 +856,7 @@ int phoneserver_deliver_at_rsp(const cmux_t * cmux, char *rsp, int len)
+     }
+     PHS_LOGD("[%d] IND\n", tid);
+     return phoneserver_deliver_indicate(cmux, rsp, len);
+-    }
++}
+ 
+ #define NUM_ELEMS(x) (sizeof(x)/sizeof(x[0]))
+ 
+@@ -989,6 +997,8 @@ int cvt_generic_cmd_req(AT_CMD_REQ_T * req)
+         return AT_RESULT_NG;
+     }
+ 
++	//PHS_LOGD("phoneserver@@@ cmd=%s\n", req->cmd_str);
++
+     mux = adapter_get_cmux(req->cmd_type, TRUE);
+     adapter_cmux_register_callback(mux, cvt_generic_cmd_rsp,
+             (int)req->recv_pty);
+@@ -1159,6 +1169,8 @@ int cvt_generic_cmd_ind(AT_CMD_IND_T * ind)
+     pty_t *ind_pty = NULL;
+     pty_t *ind_eng_pty = NULL;
+     char ind_str[MAX_AT_CMD_LEN];
++	
++	//PHS_LOGD("cvt_generic_cmd_ind@@@1 cmd=%s\n",ind->ind_str);
+ 
+     if(multiSimMode == 1) {
+         ind_pty = adapter_get_ind_pty((mux_type)(ind->recv_cmux->type));
+@@ -1170,8 +1182,17 @@ int cvt_generic_cmd_ind(AT_CMD_IND_T * ind)
+ 
+     memset(ind_str, 0, MAX_AT_CMD_LEN);
+     if (ind_pty && ind_pty->ops && ind->len < MAX_AT_CMD_LEN) {
+-        snprintf(ind_str, sizeof(ind_str), "%s%s%s", "\r\n", ind->ind_str, "\n");
+-        ind_pty->ops->pty_write(ind_pty, ind_str, strlen(ind_str));
++		if (strstr(ind->ind_str, "+CRING:")) {
++			snprintf(ind_str, sizeof(ind_str), "%s+CRING: JHJHVOICE%s", "\r\n","\n");
++			PHS_LOGD("cvt_generic_cmd_ind@@@2 cmd=%s\n",ind_str+2);
++			ind_pty->ops->pty_write(ind_pty, ind_str, strlen(ind_str));
++			PHS_LOGD("cvt_generic_cmd_ind@@@3 cmd=%s\n",ind_str+2);
++		}else{
++			snprintf(ind_str, sizeof(ind_str), "%s%s%s", "\r\n", ind->ind_str, "\n");
++			//PHS_LOGD("cvt_generic_cmd_ind@@@2 cmd=%s\n",ind->ind_str);
++			ind_pty->ops->pty_write(ind_pty, ind_str, strlen(ind_str));
++			//PHS_LOGD("cvt_generic_cmd_ind@@@3 cmd=%s\n",ind->ind_str);
++		}
+     }else
+         PHS_LOGE("ind string size > %d\n", MAX_AT_CMD_LEN);
+ 
+@@ -1717,7 +1738,10 @@ int adapter_cmux_write(cmux_t * mux, char *buf, int len, int to)
+     snprintf(str, sizeof(str),"%s", buf);
+ 
+     mutex_lock(&mux->mutex_timeout);
++	
++	PHS_LOGD("adapter_cmux_write@@@1 cmd=%s\n", str);
+     ret = mux->ops->cmux_write(mux, str, strlen(str));
++	PHS_LOGD("adapter_cmux_write@@@2 cmd=%s\n", str);
+     if(to < 0)
+     {
+         timeout.tv_sec = time(NULL) - to;
+diff --git a/phoneserver/channel_manager.c b/phoneserver/channel_manager.c
+index 84e12da..b2516de 100644
+--- a/phoneserver/channel_manager.c
++++ b/phoneserver/channel_manager.c
+@@ -772,6 +772,7 @@ static void chnmng_cmux_Init(struct channel_manager_t *const me)
+     }
+ 
+     PHS_LOGD("cmux_Init: mux device is %s", prop);
++    PHS_LOGD("chnmng_cmux_Init@@@jh prop=%s @@@",prop);
+     memset(me->itsCmux, 0, sizeof(struct cmux_t) * chn_num);
+ 
+     for (i = 0; i < chn_num; i++) {
+@@ -1047,6 +1048,7 @@ int main(int argc, char *argv[])
+ 
+     PHS_LOGD("chnmng start phone server");
+     PHS_LOGD("Phoneserver version: %s ",version_string);
++    PHS_LOGD("Phoneserver@@@jh@@@");
+ 
+     if (0 == strcmp(argv[1], "-m") && (argc > 2)) {
+         modem = argv[2];
+diff --git a/phoneserver/cmux.c b/phoneserver/cmux.c
+index dc1299c..504647d 100644
+--- a/phoneserver/cmux.c
++++ b/phoneserver/cmux.c
+@@ -99,6 +99,7 @@ static int cmux_regist_cmd_callback(struct cmux_t *const me, void *callback_fn,
+ int cmux_write(struct cmux_t *const me, char *buf, int len)
+ {
+ 	int ret = 0;
++	PHS_LOGD("cmux_write@@@1 cmd=%s\n", buf);
+ 
+ 	PHS_LOGD("PS_CMUX :%s cmux_write:%s:len=%d\n", me->name, buf, len);
+ 	if (me->muxfd > 0) {
+diff --git a/phoneserver/pty.c b/phoneserver/pty.c
+index 9fa3019..578bae9 100644
+--- a/phoneserver/pty.c
++++ b/phoneserver/pty.c
+@@ -95,6 +95,7 @@ int pty_write(void *const pty, char *buf, int len)
+ {
+ 	int ret = 0;
+ 	struct pty_t *me = (struct pty_t *)pty;
++	PHS_LOGD("pty_write@@@1 cmd=%s\n",buf+2);
+ 
+ 	sem_lock(&me->write_lock);
+ 	PHS_LOGD("pty_write get lock\n");
+@@ -110,6 +111,9 @@ int pty_write(void *const pty, char *buf, int len)
+ 			}
+ 		}
+ 	}
++	
++	PHS_LOGD("pty_write@@@2 cmd=%s\n",buf+2);
++	
+ 	sem_unlock(&me->write_lock);
+ 	PHS_LOGD("pty_write free lock\n");
+ 	return ret;
+diff --git a/phoneserver/send_thread.c b/phoneserver/send_thread.c
+index d73d921..5795388 100644
+--- a/phoneserver/send_thread.c
++++ b/phoneserver/send_thread.c
+@@ -141,6 +141,7 @@ static char *readline(struct send_thread_t *me)
+ 
+ 	/* and there will be a \0 at *p_read */
+ 	//PHS_LOGD("Send thread's TID [%d] CHNMNG:AT> %s\n", me->tid, ret);
++	//PHS_LOGD("phoneserver@@@TID [%d] CHNMNG:AT> %s\n", me->tid, ret);
+ 	return ret;
+ }
+ void *send_data(struct send_thread_t *me)
+diff --git a/ril/sprd_libril/sprd_ril_commands.h b/ril/sprd_libril/sprd_ril_commands.h
+index a648f28..3ff64e4 100644
+--- a/ril/sprd_libril/sprd_ril_commands.h
++++ b/ril/sprd_libril/sprd_ril_commands.h
+@@ -76,7 +76,7 @@
+     {RIL_REQUEST_QUERY_CLIP, dispatchVoid, responseInts},
+     {RIL_REQUEST_LAST_DATA_CALL_FAIL_CAUSE, dispatchVoid, responseInts},
+     {RIL_REQUEST_DATA_CALL_LIST, dispatchVoid, responseDataCallList},
+-    {RIL_REQUEST_RESET_RADIO, dispatchVoid, responseVoid},
++    {RIL_REQUEST_RESET_RADIO, dispatchInts, responseVoid},
+     {RIL_REQUEST_OEM_HOOK_RAW, dispatchRaw, responseRaw},
+     {RIL_REQUEST_OEM_HOOK_STRINGS, dispatchStrings, responseStrings},
+     {RIL_REQUEST_SCREEN_STATE, dispatchInts, responseVoid},
+diff --git a/ril/sprd_ril/sprd_atchannel.c b/ril/sprd_ril/sprd_atchannel.c
+index 5bbc31a..aee8067 100644
+--- a/ril/sprd_ril/sprd_atchannel.c
++++ b/ril/sprd_ril/sprd_atchannel.c
+@@ -426,6 +426,8 @@ static const char *readline(struct ATChannels *ATch)
+             RILLOGD("%s: AT< %s\n", ATch->name, ATch->line);
+     }
+ 
++
++	RILLOGD("rilc_readline@@@ cmd=%s\n",ATch->line);
+     return ATch->line;
+ }
+ 
+diff --git a/ril/sprd_ril/sprd_ril.c b/ril/sprd_ril/sprd_ril.c
+index 09188e1..e11529f 100644
+--- a/ril/sprd_ril/sprd_ril.c
++++ b/ril/sprd_ril/sprd_ril.c
+@@ -6879,7 +6879,15 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
+             }
+ 
+         case RIL_REQUEST_RESET_RADIO:
+-            requestResetRadio(channelID, t);
++			{
++				int silent_reset_radio = ((int*)data)[0];
++				if(silent_reset_radio){
++					RILLOGD("receive AT cmd to reset Modem");
++            		RIL_requestTimedCallback (silentResetModem, NULL, NULL);
++				}else{
++					requestResetRadio(channelID, t);
++				}
++			}
+             break;
+         case RIL_REQUEST_SCREEN_STATE:
+             requestScreeState(channelID, ((int*)data)[0], t);
+diff --git a/ril/sprd_rild/sprd_rild.c b/ril/sprd_rild/sprd_rild.c
+index 974d572..00d3019 100644
+--- a/ril/sprd_rild/sprd_rild.c
++++ b/ril/sprd_rild/sprd_rild.c
+@@ -186,7 +186,10 @@ OpenLib:
+     }
+ 
+     RILLOGD("Rild: rilArgv[1]=%s,rilArgv[2]=%s,rilArgv[3]=%s,rilArgv[4]=%s",rilArgv[1],rilArgv[2],rilArgv[3],rilArgv[4]);
+-    funcs = rilInit(&s_rilEnv, argc, rilArgv);
++
++	RILLOGD("RILD: @@@jh@@@\n");
++
++	funcs = rilInit(&s_rilEnv, argc, rilArgv);
+     RIL_register(funcs, argc, rilArgv);
+ 
+ done:
