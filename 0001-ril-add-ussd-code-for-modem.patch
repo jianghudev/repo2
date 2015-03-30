@@ -1,0 +1,73 @@
+From 2cd0eb70bc911077135a8a68d4dd28804507eccf Mon Sep 17 00:00:00 2001
+From: sylar <hubin_jiang@htc.com>
+Date: Mon, 30 Mar 2015 19:29:58 +0800
+Subject: [PATCH] [ril] add ussd code for modem
+
+Symptom:N/A
+Root Cause:N/A
+Solution:N/A
+Project:H7/v01a
+Note:
+
+Change-Id: I7ce93354eb6be2aaa83d9dce62bb3279d5000d5b
+---
+ .../android/internal/telephony/gsm/GsmMmiCode.java | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/src/java/com/android/internal/telephony/gsm/GsmMmiCode.java b/src/java/com/android/internal/telephony/gsm/GsmMmiCode.java
+index 1af7fc7..addbc87 100644
+--- a/src/java/com/android/internal/telephony/gsm/GsmMmiCode.java
++++ b/src/java/com/android/internal/telephony/gsm/GsmMmiCode.java
+@@ -36,6 +36,9 @@ import static com.android.internal.telephony.CommandsInterface.*;
+ import java.util.regex.Pattern;
+ import java.util.regex.Matcher;
+ 
++import com.sprd.internal.telephony.uicc.IATUtils;
++import android.telephony.TelephonyManager;
++
+ /**
+  * The motto for this file is:
+  *
+@@ -101,6 +104,8 @@ public class GsmMmiCode extends Handler implements MmiCode {
+     static final String SC_PIN2         = "042";
+     static final String SC_PUK          = "05";
+     static final String SC_PUK2         = "052";
++	
++	static final String SC_modem_reset	  = "999";
+ 
+     //***** Event Constants
+ 
+@@ -112,6 +117,8 @@ public class GsmMmiCode extends Handler implements MmiCode {
+     static final int EVENT_SET_CFF_COMPLETE     = 6;
+     static final int EVENT_USSD_CANCEL_COMPLETE = 7;
+ 
++	//static final int EVENT_SILENT_RESET_COMPLETE = 9;
++
+     //***** Instance Variables
+ 
+     GSMPhone mPhone;
+@@ -658,6 +665,21 @@ public class GsmMmiCode extends Handler implements MmiCode {
+                 } else {
+                     throw new RuntimeException ("Invalid or Unsupported MMI Code");
+                 }
++			}else if (mSc != null && mSc.equals(SC_modem_reset)) {
++					Rlog.d(LOG_TAG, "is htc test modem reset ussd");
++					if (isInterrogate()) {
++						//String channelName = "atchannel";
++						//int phoneCount=TelephonyManager.getDefault().getPhoneCount();
++						//if (phoneCount>1) {
++							int phoneId =mPhone.getPhoneId();//// get phoneId
++						//	channelName = channelName + phoneId;
++						//}
++						final String ATCmd = "AT+RESET=1";
++						String response = IATUtils.sendATCmd(ATCmd, phoneId); 
++						Rlog.d(LOG_TAG, "resp str="+response);
++					} else {
++						throw new RuntimeException ("jh Invalid or Unsupported MMI Code");
++					}					
+             } else if (mSc != null && mSc.equals(SC_CLIR)) {
+                 Rlog.d(LOG_TAG, "is CLIR");
+                 if (isActivate()) {
+-- 
+2.2.0
+
