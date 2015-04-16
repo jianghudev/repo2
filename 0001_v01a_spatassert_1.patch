@@ -1,0 +1,65 @@
+diff --git a/src/java/com/android/internal/telephony/gsm/GsmMmiCode.java b/src/java/com/android/internal/telephony/gsm/GsmMmiCode.java
+index 1852227..3e52c34 100644
+--- a/src/java/com/android/internal/telephony/gsm/GsmMmiCode.java
++++ b/src/java/com/android/internal/telephony/gsm/GsmMmiCode.java
+@@ -37,6 +37,8 @@ import static com.android.internal.telephony.CommandsInterface.*;
+ import java.util.regex.Pattern;
+ import java.util.regex.Matcher;
+ 
++import com.sprd.internal.telephony.uicc.IATUtils;
++
+ /**
+  * The motto for this file is:
+  *
+@@ -109,6 +111,9 @@ public final class GsmMmiCode extends Handler implements MmiCode {
+     static final String SC_PUK          = "05";
+     static final String SC_PUK2         = "052";
+ 
++
++    static final String SC_modem_reset    = "888";
++
+     //***** Event Constants
+ 
+     static final int EVENT_SET_COMPLETE         = 1;
+@@ -120,6 +125,8 @@ public final class GsmMmiCode extends Handler implements MmiCode {
+     static final int EVENT_USSD_CANCEL_COMPLETE = 7;
+     static final int EVENT_QUERY_LI_COMPLETE    = 8;
+ 
++    static final int EVENT_SILENT_RESET_COMPLETE = 9;
++
+     //***** Instance Variables
+ 
+     GSMPhone mPhone;
+@@ -761,6 +768,21 @@ public final class GsmMmiCode extends Handler implements MmiCode {
+                 } else {
+                     throw new RuntimeException ("Invalid or Unsupported MMI Code");
+                 }
++			} else if (mSc != null && mSc.equals(SC_modem_reset)) {
++				Rlog.d(LOG_TAG, "[htc silent reset]is htc test modem reset ussd");
++				if (isInterrogate()) {
++					String channelName = "atchannel";
++					if (TelephonyManager.isMultiSim()) {
++						int phoneId =mPhone.getPhoneId();//// get phoneId
++						channelName = channelName + phoneId;
++					}
++					//final String ATCmd = "AT+RESET=1";
++					final String ATCmd = "AT+SPATASSERT=1";
++					String response = IATUtils.sendATCmd(ATCmd, channelName);
++					Rlog.d(LOG_TAG, "[htc silent reset]resp str="+response);
++				} else {
++					throw new RuntimeException ("[jh]Invalid or Unsupported MMI Code");
++				}
+             } else if (mSc != null && mSc.equals(SC_CLIR)) {
+                 Rlog.d(LOG_TAG, "is CLIR");
+                 if (isActivate()) {
+@@ -1131,6 +1153,10 @@ public final class GsmMmiCode extends Handler implements MmiCode {
+                 // The matching up of this is done in GSMPhone.
+ 
+             break;
++			case EVENT_SILENT_RESET_COMPLETE:
++                Rlog.i(LOG_TAG, "reset modem seccussful, do something ?");
++					//// reset modem seccussful, do something ?
++				break;
+ 
+             case EVENT_USSD_CANCEL_COMPLETE:
+                 mPhone.onMMIDone(this);
