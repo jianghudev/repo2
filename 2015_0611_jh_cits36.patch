@@ -1,0 +1,81 @@
+diff --git a/src/java/com/android/internal/telephony/SubInfoRecordUpdater.java b/src/java/com/android/internal/telephony/SubInfoRecordUpdater.java
+index b8b457f..20f406a 100644
+--- a/src/java/com/android/internal/telephony/SubInfoRecordUpdater.java
++++ b/src/java/com/android/internal/telephony/SubInfoRecordUpdater.java
+@@ -95,6 +95,8 @@ public class SubInfoRecordUpdater extends Handler {
+     // SPRD: fix bug 396043
+     private static boolean sChangeSmsVoiceSubId = false;
+ 
++    private static long sLastDefaultDataSubId = SubscriptionManager.INVALID_SUB_ID;
++
+     public SubInfoRecordUpdater(Context context, Phone[] phoneProxy, CommandsInterface[] ci) {
+         logd("Constructor invoked");
+ 
+@@ -133,6 +135,14 @@ public class SubInfoRecordUpdater extends Handler {
+                         sIccId[slotId] = null;
+                         sNeedUpdate = true;
+                     }
++					long currSubid=SubscriptionManager.getDefaultDataSubId();
++					if(sLastDefaultDataSubId==SubscriptionManager.INVALID_SUB_ID){
++						sLastDefaultDataSubId = currSubid;
++						logd("jh7 lastdatasubid: " + sLastDefaultDataSubId );
++					}else{
++						
++					}
++					logd("jh5 last: " + sLastDefaultDataSubId+" curr=" +currSubid);
+                     /* SPRD: fix bug 396043 @{ */
+                     if (IccCardConstants.INTENT_VALUE_ICC_READY.equals(simStatus)
+                             && !sNeedUpdate) {
+@@ -170,6 +180,8 @@ public class SubInfoRecordUpdater extends Handler {
+                         logd("SIM" + (slotId + 1) + " hot plug out");
+                         sNeedUpdate = true;
+                     }
++                    sLastDefaultDataSubId = SubscriptionManager.getDefaultDataSubId();
++					logd("jh6 lastdatasubid: " + sLastDefaultDataSubId );
+                     sFh[slotId] = null;
+                     sIccId[slotId] = ICCID_STRING_FOR_NO_SIM;
+                     if (isAllIccIdQueryDone() && sNeedUpdate) {
+@@ -572,9 +584,42 @@ public class SubInfoRecordUpdater extends Handler {
+         long []subIds = SubscriptionManager.getActiveSubIdList();
+         SubscriptionManager.clearDefaultsForInactiveSubIds();
+         logd("autoSetDefaultSMSVoiceDataSubId subIds.length =" + subIds.length);
++        for (int i = 0; i < subIds.length; i++) {
++            logd("autoSetDefaultSMSVoiceDataSubId subIds.length =" + subIds[i]);
++        }
+         if (subIds.length > 1) {
++            logd("autoSetDefaultSMSVoiceDataSubId jh1 subids[0]="+subIds[0]);
+             if (SubscriptionManager.getDefaultDataSubId() == SubscriptionManager.INVALID_SUB_ID) {
+-                SubscriptionManager.setDefaultDataSubId(subIds[0]);
++				logd("autoSetDefaultSMSVoiceDataSubId jh2 "+subIds[0]);
++				SubscriptionManager.setDefaultDataSubId(subIds[0]);
++            }else {
++            	boolean needResetdataSubid=false;
++				boolean simState=false;
++				boolean isHotswap=false;
++                for (int i=0; i< PROJECT_SIM_NUM; i++) {
++					 simState=sInsertSimState[i] == SIM_NOT_CHANGE;
++					 logd("jh8 simState="+simState);
++					if(simState){
++						for (int j=0; j< PROJECT_SIM_NUM; j++) {
++							isHotswap= sLastDefaultDataSubId == SubscriptionManager.getSubId(j)[0];
++							logd("jh9 isHotswap="+isHotswap);
++							if(isHotswap){
++								needResetdataSubid=true;
++								break;
++							}
++						}
++					}
++					if(needResetdataSubid){
++						break;
++					}
++                }
++				logd("autoSetDefaultSMSVoiceDataSubId jh3 simnum="+PROJECT_SIM_NUM+" need="+
++					needResetdataSubid+" lastsubid="+sLastDefaultDataSubId+" sub[0]=" +subIds[0]);
++				if(needResetdataSubid){
++					 logd("autoSetDefaultSMSVoiceDataSubId jh4 subid="+subIds[0]);
++                     SubscriptionManager.setDefaultDataSubId(sLastDefaultDataSubId); 
++					 sLastDefaultDataSubId = SubscriptionManager.INVALID_SUB_ID;
++                }
+             }
+             if (SubscriptionManager.getDefaultSmsSubId() == SubscriptionManager.INVALID_SUB_ID) {
+                 SubscriptionManager.setDefaultSmsSubId(SubscriptionManager.ASK_USER_SUB_ID);
