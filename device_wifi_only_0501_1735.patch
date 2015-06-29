@@ -1,0 +1,15 @@
+diff --git a/scx35_sp7731gea_hd/sp7731gea_hdplus_dt.mk b/scx35_sp7731gea_hd/sp7731gea_hdplus_dt.mk
+index 20251ea..311c836 100644
+--- a/scx35_sp7731gea_hd/sp7731gea_hdplus_dt.mk
++++ b/scx35_sp7731gea_hd/sp7731gea_hdplus_dt.mk
+@@ -1,6 +1,10 @@
+ include device/sprd/scx35_sp7731gea_hd/sp7731gea_hd_dt_common.mk
+ 
++ifneq ($(TARGET_PRODUCT),$(filter %wifi, $(TARGET_PRODUCT)))
+ include $(PLATDIR)/plus.mk
++else
++include $(PLATDIR)/base.mk
++endif
+ 
+ # Overrides
+ PRODUCT_NAME := sp7731gea_hdplus_dt
