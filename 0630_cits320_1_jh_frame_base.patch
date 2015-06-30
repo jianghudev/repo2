@@ -1,0 +1,63 @@
+diff --git a/services/core/java/com/android/server/TelephonyRegistry.java b/services/core/java/com/android/server/TelephonyRegistry.java
+index 19b5e70..79dc0fb 100644
+--- a/services/core/java/com/android/server/TelephonyRegistry.java
++++ b/services/core/java/com/android/server/TelephonyRegistry.java
+@@ -367,7 +367,9 @@ class TelephonyRegistry extends ITelephonyRegistry.Stub {
+                     if ((events & PhoneStateListener.LISTEN_SERVICE_STATE) != 0) {
+                         try {
+                             if (VDBG) log("listen: call onSSC state=" + mServiceState[phoneId]);
+-                            r.callback.onServiceStateChanged(
++							
++							log(" @@jh@@31  phoneId=" + phoneId);
++							r.callback.onServiceStateChanged(
+                                     new ServiceState(mServiceState[phoneId]));
+                         } catch (RemoteException ex) {
+                             remove(r.binder);
+@@ -393,8 +395,11 @@ class TelephonyRegistry extends ITelephonyRegistry.Stub {
+                     }
+                     if ((events & PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR) != 0) {
+                         try {
++							
++							log(" @@jh@@6  cfi=" + mCallForwarding[phoneId]);
+                             r.callback.onCallForwardingIndicatorChanged(
+                                     mCallForwarding[phoneId]);
++							log(" @@jh@@7  cfi=" + mCallForwarding[phoneId]);
+                         } catch (RemoteException ex) {
+                             remove(r.binder);
+                         }
+@@ -572,14 +577,16 @@ class TelephonyRegistry extends ITelephonyRegistry.Stub {
+                                 + " phoneId=" + phoneId + " state=" + state);
+                     }
+                     if (((r.events & PhoneStateListener.LISTEN_SERVICE_STATE) != 0) &&
+-                            ((r.subId == subId) ||
+-                            (r.subId == SubscriptionManager.DEFAULT_SUB_ID))) {
++                            ((r.subId == subId ) ||
++                            (r.subId == SubscriptionManager.DEFAULT_SUB_ID  ))) {
+                         try {
+                             if (DBG) {
+                                 log("notifyServiceStateForSubscriber: callback.onSSC r=" + r
+                                         + " subId=" + subId + " phoneId=" + phoneId
+                                         + " state=" + state);
+                             }
++							
++							log(" @@jh@@32  phoneId=" +phoneId+" r.pID="+ r.phoneId);
+                             r.callback.onServiceStateChanged(new ServiceState(state));
+                         } catch (RemoteException ex) {
+                             mRemoveList.add(r.binder);
+@@ -763,10 +770,14 @@ class TelephonyRegistry extends ITelephonyRegistry.Stub {
+                 mCallForwarding[phoneId] = cfi;
+                 for (Record r : mRecords) {
+                     if (((r.events & PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR) != 0) &&
+-                            ((r.subId == subId) ||
+-                            (r.subId == SubscriptionManager.DEFAULT_SUB_ID))) {
++                            ((r.subId == subId && r.phoneId==phoneId ) ||
++                            (r.subId == SubscriptionManager.DEFAULT_SUB_ID && r.phoneId==phoneId ))) {
+                         try {
++							
++							log(" @@jh@@4  cfi=" + cfi);
+                             r.callback.onCallForwardingIndicatorChanged(cfi);
++							//mCallForwarding[phoneId] = false;
++							log(" @@jh@@5  cfi=" + cfi);
+                         } catch (RemoteException ex) {
+                             mRemoveList.add(r.binder);
+                         }

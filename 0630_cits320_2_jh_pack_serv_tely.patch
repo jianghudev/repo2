@@ -1,0 +1,100 @@
+diff --git a/src/com/sprd/phone/CallForwardService.java b/src/com/sprd/phone/CallForwardService.java
+index 9cfc2fa..4cf0caa 100644
+--- a/src/com/sprd/phone/CallForwardService.java
++++ b/src/com/sprd/phone/CallForwardService.java
+@@ -110,22 +110,35 @@ public class CallForwardService extends Service {
+                 switch (serviceState.getState()) {
+                     case ServiceState.STATE_OUT_OF_SERVICE:
+                     case ServiceState.STATE_POWER_OFF:
++						log(" @@jh@@3 phoneId=" + phoneId);
+                         updateCfi(false, CommandsInterface.SERVICE_CLASS_VOICE, phoneId);
+                         if (CallForwardHelper.isSupportVT()) {
+                             updateCfi(false, CommandsInterface.SERVICE_CLASS_DATA_SYNC, phoneId);
+                         }
+                         needUpdateCfiSub[phoneId] = true;
++						onCfiChanged(false, CommandsInterface.SERVICE_CLASS_VOICE, phoneId);
+                         break;
+                     case ServiceState.STATE_IN_SERVICE:
+                         log("Phone[" + phoneId + "]-onServiceStateChanged()-----STATE_IN_SERVICE----need to updateCfi? " + needUpdateCfiSub[phoneId]);
+-                        if (needUpdateCfiSub[phoneId]) {
+-                            updateCfi(mVoiceCfuVisible[phoneId], CommandsInterface.SERVICE_CLASS_VOICE, phoneId);
++						log(" @@jh@@24 Cfi=" + needUpdateCfiSub[phoneId]+" voice="+ mVoiceCfuVisible[phoneId]);
++						
++						if (needUpdateCfiSub[phoneId] && 
++							(!mVoiceCfuVisible[phoneId] || !mVideoCfuVisible[phoneId] ) ){
++							needQueryCfuSub[phoneId]=true;
++							queryAllCfu(phoneId);
++							needUpdateCfiSub[phoneId] = false;
++							break;
++						}else if (needUpdateCfiSub[phoneId]) {
++							log(" @@jh@@25 voice=" + mVoiceCfuVisible[phoneId]);
++							updateCfi(mVoiceCfuVisible[phoneId], CommandsInterface.SERVICE_CLASS_VOICE, phoneId);
+                             if (CallForwardHelper.isSupportVT()) {
+                                 updateCfi(mVideoCfuVisible[phoneId], CommandsInterface.SERVICE_CLASS_DATA_SYNC, phoneId);
+                             }
+                             needUpdateCfiSub[phoneId] = false;
+                         }
++						log(" @@jh@@21 phoneId=" + phoneId);
+                         queryAllCfu(phoneId);
++						log(" @@jh@@22 phoneId=" + phoneId);
+                         break;
+                     default:
+                         break;
+@@ -146,6 +159,7 @@ public class CallForwardService extends Service {
+     }
+ 
+     private void onCfiChanged(boolean visible, int serviceClass, int phoneId) {
++		log(" @@jh@@26 visible=" + visible+" phoneId="+phoneId);
+         if (phoneId < 0 || phoneId > TelephonyManager.getDefault().getPhoneCount()) {
+             return;
+         }
+@@ -179,22 +193,41 @@ public class CallForwardService extends Service {
+             String simState = intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE);
+             mPhoneId = intent.getIntExtra(PhoneConstants.PHONE_KEY, SubscriptionManager.DEFAULT_PHONE_ID);
+             log(" Receive sim " + mPhoneId + " state changed: " + simState);
+-            if (simState.equals(IccCardConstants.INTENT_VALUE_ICC_LOADED)) {
+-                mSIMReady = true;
+-                registerPhoneStateListener();
++            if (simState.equals(IccCardConstants.INTENT_VALUE_ICC_LOADED)
++				|| simState.equals(IccCardConstants.INTENT_VALUE_ICC_ABSENT)
++				|| simState.equals(IccCardConstants.INTENT_VALUE_ICC_NOT_READY)
++				) {
++				int phoneNum = TelephonyManagerSprd.getDefault().getPhoneCount();
++            	mSIMReady = true;
++				if (mPhoneId >= 0 && mPhoneId < phoneNum) {
++					needQueryCfuSub[mPhoneId] = true;
++					log(" @@jh@@23 phoneId=" + mPhoneId);
++				}
++            	registerPhoneStateListener(simState);
+             }
+         }
+     };
+ 
+-    protected void registerPhoneStateListener() {
+-        if(!mSIMReady) return; // SIM card data not yet loaded, 
++
++    protected void registerPhoneStateListener(String simState) {
++		log(" @@jh@@1 registerPhoneStateListener simReady=" + mSIMReady);
++        if(!mSIMReady){// SIM card data not yet loaded, 
++			//return; 
++		} 
++		log(" @@jh@@2 registerPhoneStateListener simReady=" + mSIMReady);
+         int phoneCount = TelephonyManagerSprd.getDefault().getPhoneCount();
+         if (mPhoneId >= 0 && mPhoneId < phoneCount) {
+             TelephonyManager telephonyManager = (TelephonyManager)mApplication.getSystemService(
+                     Context.TELEPHONY_SERVICE);
+-            telephonyManager.listen(getPhoneStateListener(mPhoneId),
+-                    PhoneStateListener.LISTEN_SERVICE_STATE
+-                    | PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR);
++			int event=1;
++			if (simState.equals(IccCardConstants.INTENT_VALUE_ICC_LOADED)) {
++				event=PhoneStateListener.LISTEN_SERVICE_STATE
++                    | PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR;
++			}else if (simState.equals(IccCardConstants.INTENT_VALUE_ICC_ABSENT)
++				|| simState.equals(IccCardConstants.INTENT_VALUE_ICC_NOT_READY)) {
++				event=PhoneStateListener.LISTEN_SERVICE_STATE;
++			}
++			telephonyManager.listen(getPhoneStateListener(mPhoneId),event);
+         }
+         mSIMReady = false;
+     }
