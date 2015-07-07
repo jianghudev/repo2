@@ -1,0 +1,18 @@
+diff --git a/src/com/sprd/phone/OtherGlobals.java b/src/com/sprd/phone/OtherGlobals.java
+index 2d8e61e..3d2f792 100644
+--- a/src/com/sprd/phone/OtherGlobals.java
++++ b/src/com/sprd/phone/OtherGlobals.java
+@@ -599,8 +599,13 @@ public class OtherGlobals extends ContextWrapper {
+                 if (enabled
+                         && (simState == TelephonyManager.SIM_STATE_READY || simState == TelephonyManager.SIM_STATE_UNKNOWN)) {
+                     if (!isRadioOn) {
++						boolean canPower=false;
+                         Log.d(TAG, "radio not on, power on it");
+                         radioInteraction.powerOnRadio(35000);
++						Log.d(TAG, "@@jh@@"+" enable="+enabled+" stat="+simState);
++						mRadioTaskManager.autoSetPrimaryCardAccordingToPolicy();
++						canPower=RadioTaskManager.canPowerRadioOn(phoneId);
++						Log.d(TAG, "@@jh@@"+" enable="+enabled+" canP="+canPower);
+                     } else {
+                         Log.d(TAG, "radio is on, do nothing");
+                     }
