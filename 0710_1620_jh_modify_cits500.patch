@@ -1,0 +1,50 @@
+diff --git a/src/java/com/android/internal/telephony/SubInfoRecordUpdater.java b/src/java/com/android/internal/telephony/SubInfoRecordUpdater.java
+index 4f90e1c..63f88ea 100644
+--- a/src/java/com/android/internal/telephony/SubInfoRecordUpdater.java
++++ b/src/java/com/android/internal/telephony/SubInfoRecordUpdater.java
+@@ -584,23 +584,28 @@ public class SubInfoRecordUpdater extends Handler {
+             logd("autoSetDefaultSMSVoiceDataSubId subIds["+i+"] =" + subIds[i] +", sLastSubId["+i+"]="+sLastSubId[i]);
+         }
+         if (subIds.length > 1) {
+-            if (SubscriptionManager.getDefaultDataSubId() == SubscriptionManager.INVALID_SUB_ID) {
+-                SubscriptionManager.setDefaultDataSubId(subIds[0]);
+-            }else {
+-                for (int i=0; i< PROJECT_SIM_NUM; i++) {
+-                    logd(" i =" + i + ",SubscriptionManager.getSubId("+i+")[0] = "+ SubscriptionManager.getSubId(i)[0]);
+-                    if(sInsertSimState[i] == SIM_NEW){
+-                        logd("sInsertSimState["+i+"] == SIM_NEW");
+-                        if(sLastSubId[i] == SubscriptionManager.getSubId(i)[0] && sLastDefaultDataSubId == SubscriptionManager.getSubId(i)[0]){
+-                            logd("i= " + i+ ", set default data subId again.");
+-                            SubscriptionManager.setDefaultDataSubId(sLastDefaultDataSubId);
+-                            sLastDefaultDataSubId = SubscriptionManager.INVALID_SUB_ID;
+-                            sLastSubId[i] = SubscriptionManager.INVALID_SUB_ID;
+-                            break;
+-                        }
+-                    }
+-                }
+-            }
++		    TelephonyManager teleMgr = (TelephonyManager)
++            	LoadClassManager.createNewInstance("android.telephony.TelephonyManagerSprd", sContext);
++        	int primePhoneId = (Integer)(LoadClassManager.invokeMethod(teleMgr, "getPrimaryCard"));
++			logd("@@jh@@1 primeID=" + primePhoneId);
++
++			long[] primeSubIds = SubscriptionManager.getSubId(primePhoneId);
++			long retSubId = 0;
++			if(primeSubIds != null) {
++				retSubId = primeSubIds[0];
++				logd("@@jh@@2 priID="+retSubId+" subid="+subIds[0]);
++			}else{
++				long currSubid=SubscriptionManager.getDefaultDataSubId();
++				logd("@@jh@@3 priID="+primePhoneId+" subid="+subIds[0]+" cur="+currSubid);
++				if (currSubid== SubscriptionManager.INVALID_SUB_ID) {
++					retSubId = subIds[0];
++            	}else{
++            		retSubId =currSubid;
++            	}
++			}
++			logd("@@jh@@4 subID=" + retSubId);
++			SubscriptionManager.setDefaultDataSubId(retSubId);
++				
+             if (SubscriptionManager.getDefaultSmsSubId() == SubscriptionManager.INVALID_SUB_ID) {
+                 SubscriptionManager.setDefaultSmsSubId(SubscriptionManager.ASK_USER_SUB_ID);
+             }
