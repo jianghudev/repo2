@@ -1,0 +1,260 @@
+diff --git a/ril/sprd_ril/sprd_ril.c b/ril/sprd_ril/sprd_ril.c
+index f158595..455ea71 100755
+--- a/ril/sprd_ril/sprd_ril.c
++++ b/ril/sprd_ril/sprd_ril.c
+@@ -381,6 +381,10 @@ static int s_lac = 0;
+ static int s_cid = 0;
+ static int s_init_sim_ready = 0; // for svlte, setprop only once
+ 
++bool shuttingdownRadio[MAX_CHANNELS]= {false};
++static bool shuttingdown_need_delayPowerOn =false;
++
++
+ #if defined (GLOBALCONFIG_RIL_SAMSUNG_LIBRIL_INTF_EXTENSION)
+ #define RIL_DATA_PREFER_PROPERTY  "persist.sys.dataprefer.simid"
+ typedef struct {
+@@ -1577,6 +1581,112 @@ void initSIMPresentState() {
+     bOnlyOneSIMPresent = iAbsentSIMCount == 1 ? true : false;
+ }
+ 
++
++void tryToPowerOnRadio(int channelID,int autoAttach,int dataEnable, RIL_Token t){
++    char cmd[128] = {0};
++    ATResponse *p_response = NULL;
++	int err=0;
++
++	
++	s_testmode = getTestMode();
++	initSIMPresentState();
++	if (isCSFB() || !strcmp(s_modem, "w")) {
++		buildTestModeCmd(cmd, sizeof(cmd));
++		at_send_command(ATch_type[channelID], cmd, NULL);
++	}
++	 /* SPRD : for svlte & csfb @{ */
++	if (isSvLte()) {
++		setCeMode(channelID);
++	}
++	bool isSimCUCC = false;
++	err = at_send_command_numeric(ATch_type[channelID], "AT+CIMI", &p_response);
++	if (err < 0 || p_response->success == 0) {
++		RILLOGE("requestRadioPower AT+CIMI return ERROR");
++	} else {
++		char* imsi = p_response->p_intermediates->line;
++		int imsiLength = strlen(imsi);
++		RILLOGD("requestRadioPower--IMSI:[%s]", imsi);
++		if (imsiLength > 5
++				&& (strStartsWith(imsi, "46001")
++						|| strStartsWith(imsi, "46006")
++						|| strStartsWith(imsi, "46009"))) {
++			isSimCUCC = true;
++		}
++	}
++	if (isSvLte()) {
++	  // if svlte, auto-attach is decided by framework
++		if (strcmp(s_modem, "l") && isSimCUCC) {
++			err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=1", &p_response);
++		} else if(autoAttach == 1) {
++			RIL_AppType apptype = getSimType(channelID);
++			err = at_send_command(ATch_type[channelID], apptype == RIL_APPTYPE_USIM ? "AT+SAUTOATT=0" : "AT+SAUTOATT=1", &p_response);
++		} else {
++			err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=0", &p_response);
++		}
++	} else if (isCSFB() && (!strcmp(s_modem, "l") || !strcmp(s_modem, "tl") || !strcmp(s_modem, "lf"))) {
++		if (s_multiSimMode && !bOnlyOneSIMPresent) {
++			if (s_testmode == 10) {
++				extern int s_sim_num;
++				RILLOGD("s_sim_num=%d,autoAttach=%d,dataEnable=%d",s_sim_num, autoAttach, dataEnable);
++				snprintf(cmd, sizeof(cmd), "AT+SPSWITCHDATACARD=%d,%d", s_sim_num, autoAttach && dataEnable);
++				at_send_command(ATch_type[channelID], cmd, NULL );
++			}
++			//err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=0", &p_response);
++		 }else {
++			 err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=1", &p_response);
++		 }
++	}else {
++		if(s_multiSimMode) {
++			if(autoAttach == 1)
++				err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=1", &p_response);
++			else
++				err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=0", &p_response);
++		} else {
++			err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=1", &p_response);
++		}
++	}
++	if (err < 0 || p_response->success == 0)
++		RILLOGE("GPRS auto attach failed!");
++
++	if (strcmp(s_modem, "l")) {
++		err = at_send_command(ATch_type[channelID],  "AT+SFUN=4", &p_response);
++	} else {
++		if (isCSFB() && getSimType(channelID) != RIL_APPTYPE_USIM) {
++			RILLOGE("USIM card is required in CSFB Mode.");
++			err = at_send_command(ATch_type[channelID],  "AT+SFUN=4", &p_response);
++		} else {
++			if (!isSimCUCC) {
++				err = at_send_command(ATch_type[channelID], "AT+SFUN=4", &p_response);
++			} else {
++				err = at_send_command(ATch_type[channelID], "AT+SFUN=3", &p_response);
++				RILLOGE("LTE radio should be powered by CMCC USIM Card!");
++
++				int lteState = 0;
++				RIL_onUnsolicitedResponse (RIL_UNSOL_LTE_READY, (void *)&lteState, 4);
++				RILLOGE("Unsolicited LTE ready is false!");
++
++				goto error;
++			}
++		}
++	}
++	if (err < 0|| p_response->success == 0) {
++		/* Some stacks return an error when there is no SIM,
++		 * but they really turn the RF portion on
++		 * So, if we get an error, let's check to see if it
++		 * turned on anyway
++		*/
++
++		if (isRadioOn(channelID) != 1) {
++			goto error;
++		}
++	}
++	setRadioState(channelID, RADIO_STATE_SIM_NOT_READY);
++	return;
++error:
++    at_response_free(p_response);
++    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
++
++}
+ static void requestRadioPower(int channelID, void *data, size_t datalen, RIL_Token t)
+ {
+ 
+@@ -1640,7 +1750,9 @@ static void requestRadioPower(int channelID, void *data, size_t datalen, RIL_Tok
+ 
+     if (onOff == 0) {
+         /* The system ask to shutdown the radio */
++		shuttingdownRadio[channelID]=true;
+         err = at_send_command(ATch_type[channelID], "AT+SFUN=5", &p_response);
++		shuttingdownRadio[channelID]=false;
+         if (err < 0 || p_response->success == 0)
+             goto error;
+ 
+@@ -1658,101 +1770,16 @@ static void requestRadioPower(int channelID, void *data, size_t datalen, RIL_Tok
+             RILLOGD("set sLteRegState: OUT OF SERVICE.");
+         }
+         setRadioState(channelID, RADIO_STATE_OFF);
++		if(shuttingdown_need_delayPowerOn){
++			tryToPowerOnRadio(channelID,autoAttach,dataEnable,t);
++			shuttingdown_need_delayPowerOn=false;
++		}
+     } else if (onOff > 0 && sState == RADIO_STATE_OFF) {
+-        s_testmode = getTestMode();
+-        initSIMPresentState();
+-        if (isCSFB() || !strcmp(s_modem, "w")) {
+-            buildTestModeCmd(cmd, sizeof(cmd));
+-            at_send_command(ATch_type[channelID], cmd, NULL);
+-        }
+-         /* SPRD : for svlte & csfb @{ */
+-        if (isSvLte()) {
+-            setCeMode(channelID);
+-        }
+-        bool isSimCUCC = false;
+-        err = at_send_command_numeric(ATch_type[channelID], "AT+CIMI", &p_response);
+-        if (err < 0 || p_response->success == 0) {
+-            RILLOGE("requestRadioPower AT+CIMI return ERROR");
+-        } else {
+-            char* imsi = p_response->p_intermediates->line;
+-            int imsiLength = strlen(imsi);
+-            RILLOGD("requestRadioPower--IMSI:[%s]", imsi);
+-            if (imsiLength > 5
+-                    && (strStartsWith(imsi, "46001")
+-                            || strStartsWith(imsi, "46006")
+-                            || strStartsWith(imsi, "46009"))) {
+-                isSimCUCC = true;
+-            }
+-        }
+-        if (isSvLte()) {
+-          // if svlte, auto-attach is decided by framework
+-            if (strcmp(s_modem, "l") && isSimCUCC) {
+-                err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=1", &p_response);
+-            } else if(autoAttach == 1) {
+-                RIL_AppType apptype = getSimType(channelID);
+-                err = at_send_command(ATch_type[channelID], apptype == RIL_APPTYPE_USIM ? "AT+SAUTOATT=0" : "AT+SAUTOATT=1", &p_response);
+-            } else {
+-                err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=0", &p_response);
+-            }
+-        } else if (isCSFB() && (!strcmp(s_modem, "l") || !strcmp(s_modem, "tl") || !strcmp(s_modem, "lf"))) {
+-            if (s_multiSimMode && !bOnlyOneSIMPresent) {
+-                if (s_testmode == 10) {
+-                    RILLOGD("s_sim_num=%d,autoAttach=%d,dataEnable=%d",s_sim_num, autoAttach, dataEnable);
+-                    snprintf(cmd, sizeof(cmd), "AT+SPSWITCHDATACARD=%d,%d", s_sim_num, autoAttach && dataEnable);
+-                    at_send_command(ATch_type[channelID], cmd, NULL );
+-                }
+-                //err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=0", &p_response);
+-             }else {
+-                 err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=1", &p_response);
+-             }
+-        }
+-        /* @} */
+-        else {
+-            if(s_multiSimMode) {
+-                if(autoAttach == 1)
+-                    err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=1", &p_response);
+-                else
+-                    err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=0", &p_response);
+-            } else {
+-                err = at_send_command(ATch_type[channelID], "AT+SAUTOATT=1", &p_response);
+-            }
+-        }
+-        if (err < 0 || p_response->success == 0)
+-            RILLOGE("GPRS auto attach failed!");
+-
+-        if (strcmp(s_modem, "l")) {
+-            err = at_send_command(ATch_type[channelID],  "AT+SFUN=4", &p_response);
+-        } else {
+-            if (isCSFB() && getSimType(channelID) != RIL_APPTYPE_USIM) {
+-                RILLOGE("USIM card is required in CSFB Mode.");
+-                err = at_send_command(ATch_type[channelID],  "AT+SFUN=4", &p_response);
+-            } else {
+-                if (!isSimCUCC) {
+-                    err = at_send_command(ATch_type[channelID], "AT+SFUN=4", &p_response);
+-                } else {
+-                    err = at_send_command(ATch_type[channelID], "AT+SFUN=3", &p_response);
+-                    RILLOGE("LTE radio should be powered by CMCC USIM Card!");
+-
+-                    int lteState = 0;
+-                    RIL_onUnsolicitedResponse (RIL_UNSOL_LTE_READY, (void *)&lteState, 4);
+-                    RILLOGE("Unsolicited LTE ready is false!");
+-
+-                    goto error;
+-                }
+-            }
+-        }
+-        if (err < 0|| p_response->success == 0) {
+-            /* Some stacks return an error when there is no SIM,
+-             * but they really turn the RF portion on
+-             * So, if we get an error, let's check to see if it
+-             * turned on anyway
+-            */
+-
+-            if (isRadioOn(channelID) != 1) {
+-                goto error;
+-            }
+-        }
+-        setRadioState(channelID, RADIO_STATE_SIM_NOT_READY);
++		if(shuttingdownRadio[channelID]){
++			shuttingdown_need_delayPowerOn=true;
++		}else{
++			tryToPowerOnRadio(channelID,autoAttach,dataEnable,t);
++		}
+     }
+ 
+     at_response_free(p_response);
+@@ -5965,6 +5992,10 @@ static void requestSendAT(int channelID, char *data, size_t datalen, RIL_Token t
+         char prop[PROPERTY_VALUE_MAX];
+         property_get(PROP_WIFI_NORIL, prop, "false");
+         RILLOGD("Get PROP_WIFI_NORIL = %s",prop);
++		//if(!strncasecmp(at_cmd, "AT+SFUN=4", strlen("AT+SFUN=4"))||
++		//	!strncasecmp(at_cmd, "AT+sfun=4", strlen("AT+sfun=4")) ){
++		//}
++		//TODO +sfun=4 +sfun=5
+         if(!strcmp(prop,"true")){
+             strlcat(buf, "ERROR", sizeof(buf));
+             strlcat(buf, "\r\n", sizeof(buf));
