@@ -1,0 +1,236 @@
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImplProxy.java b/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImplProxy.java
+index 7b8764e..0923f7b 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImplProxy.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImplProxy.java
+@@ -39,6 +39,12 @@ public class NetworkControllerImplProxy extends BroadcastReceiver {
+     private static final String MODEM_STAT = "modem_stat";
+     private static final String MODEM_ASSERT = "modem_assert";
+     private static final String MODEM_RESET =  "modem_reset";
++    private static final String MODEM_ALIVE = "modem_alive";
++
++    public boolean mIsModemAssert = false;
++    //mIsModemAlive is just for Silent reset function. After silent reset, it should be reset.
++    public boolean mIsModemAlive = false;
++
+ 
+     /* SPRD: Bug388744 Use correct default network controller @{ */
+     private int mDefaultController = 0;
+@@ -56,7 +62,7 @@ public class NetworkControllerImplProxy extends BroadcastReceiver {
+ 
+         mNetworkControllerImplSprd = new NetworkControllerImplSprd[mPhoneCount];
+         for (int i = 0; i < mPhoneCount; i++) {
+-            mNetworkControllerImplSprd[i] = new NetworkControllerImplSprd(context, i);
++            mNetworkControllerImplSprd[i] = new NetworkControllerImplSprd(context, i,this);
+         }
+         mDefaultNetworkControllerImplSprd = mNetworkControllerImplSprd[0];
+ 
+@@ -161,14 +167,16 @@ public class NetworkControllerImplProxy extends BroadcastReceiver {
+ 
+             if (state.equals(MODEM_ASSERT) || state.equals(MODEM_RESET)) {
+                 Log.d(TAG, "modem assert or reset");
+-                for (int i= 0;i<mPhoneCount;i++) {
+                     //mNetworkControllerImplSprd[i].mDataConnected = false;
+                     //mNetworkControllerImplSprd[i].refreshViews();
+                     //mNetworkControllerImplSprd[i].isModemAlive = false;
+-
+-                    mNetworkControllerImplSprd[i].isModemAssert = true;
+-                    mNetworkControllerImplSprd[i].isVoiceStateIn= false;
+-                }
++                    
++                    mIsModemAssert = true;
++                    mIsModemAlive = false;
++                    //mNetworkControllerImplSprd[i].mIsVoiceStateIn= false;
++            } else if(state.equals(MODEM_ALIVE)){
++                    mIsModemAssert = false;
++                    mIsModemAlive = true;
+             }
+         }
+     }
+@@ -243,4 +251,11 @@ public class NetworkControllerImplProxy extends BroadcastReceiver {
+         }
+     }
+     /* @} */
++
++	public void cleanupModemAssert() {
++		Log.d(TAG, "cleanupModemAssert");
++			mIsModemAssert = false;
++			mIsModemAlive = false;
++			//mNetworkControllerImplSprd[i].mIsVoiceStateIn= false;
++    }
+ }
+diff --git a/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImplSprd.java b/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImplSprd.java
+index a81ff02..a14763e 100644
+--- a/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImplSprd.java
++++ b/packages/SystemUI/src/com/android/systemui/statusbar/policy/NetworkControllerImplSprd.java
+@@ -147,7 +147,6 @@ public class NetworkControllerImplSprd extends BroadcastReceiver
+ 
+     private Locale mLocale = null;
+     private Locale mLastLocale = null;
+-	private boolean mIsCardAbsent=true;
+ 	private boolean mModemAssert=false;
+ 
+     private int[] mNetworkAndDataIcon = TelephonyIcons.HTC_GENERAL_G_DATA_ICON;
+@@ -187,9 +186,9 @@ public class NetworkControllerImplSprd extends BroadcastReceiver
+     boolean mDataAndWifiStacked = false;
+     boolean isModemAlive = true;
+ 
+-    boolean isModemAssert = false;
+-    boolean isVoiceStateIn= false;
+-    boolean isDataStateIn = false;
++
++    boolean mIsVoiceStateIn= false;
++    boolean mIsDataStateIn = false;
+ 
+     public interface SignalCluster {
+         void setWifiIndicators(boolean visible, int strengthIcon, String contentDescription);
+@@ -215,17 +214,18 @@ public class NetworkControllerImplSprd extends BroadcastReceiver
+     // SPRD: fixbug390676 power off flishlight when coming a call.
+     private ControFlashlight mControFlashlight;
+ 
++	private NetworkControllerImplProxy mProxy;
+     /**
+      * Construct this controller object and register for updates.
+      */
+-    public NetworkControllerImplSprd(Context context, int phoneId) {
++    public NetworkControllerImplSprd(Context context, int phoneId,NetworkControllerImplProxy proxy) {
+         mContext = context;
+         mPhoneId = phoneId;
+         // to be modified
+         mColorIndex = mPhoneId;
+         final Resources res = context.getResources();
+ 
+-
++		mProxy=proxy;
+         ConnectivityManager cm = (ConnectivityManager)mContext.getSystemService(
+                 Context.CONNECTIVITY_SERVICE);
+         mHasMobileDataFeature = cm.isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
+@@ -609,8 +609,8 @@ public class NetworkControllerImplSprd extends BroadcastReceiver
+                             " voiceState=" + state.getVoiceRegState()
+                             + " dataState=" + state.getDataRegState());
+                 }
+-                isVoiceStateIn = state.getVoiceRegState() == 0 ? true : false;
+-                isDataStateIn = state.getDataRegState() == 0 ? true : false;
++                mIsVoiceStateIn = state.getVoiceRegState() == 0 ? true : false;
++                mIsDataStateIn = state.getDataRegState() == 0 ? true : false;
+ 
+                 mServiceState = state;
+                 mDataNetType = mServiceState.getNetworkType();
+@@ -841,40 +841,66 @@ public class NetworkControllerImplSprd extends BroadcastReceiver
+         return 1;
+     }
+     private boolean notNeedRefresh(){
+-        Log.d(TAG,"notNeedRefresh + ");
+-        boolean ret;
+-    	boolean isCardAbsent=!mPhone.hasIccCard();
++        if(DEBUG){
++            Log.d(TAG,"notNeedRefresh + ");
++        }
++        boolean ret = false;
++        boolean isCardAbsent= !mPhone.hasIccCard(mPhoneId);
++        boolean isDataConnected = mDataState == TelephonyManager.DATA_CONNECTED;
+ 
+-        if (mSignalStrength != null) {
++        if(DEBUG){
+             Log.d(TAG, "mSignalStrength: " + mSignalStrength);
+-        } else {
+-            Log.d(TAG, "mSignalStrength == NULL");
++            Log.d(TAG,"mPhoneId: " + mPhoneId + ", mIsModemAssert:" + mProxy.mIsModemAssert + ", mIsModemAlive = " + mProxy.mIsModemAlive + ", mIsVoiceStateIn: " + mIsVoiceStateIn + ", mIsDataStateIn:" + mIsDataStateIn + ", isCardAbsent: "+isCardAbsent + ", isDataConnected = "+isDataConnected);
+         }
+-        Log.d(TAG,"mPhoneId: " + mPhoneId + ", isModemAssert:" + isModemAssert + ",isVoiceStateIn: "+isVoiceStateIn + ", isDataStateIn:" + isDataStateIn + ", isCardAbsent: "+isCardAbsent);
+ 
+         //boolean noNeedRefresh = mModemAssert && (mIsCardAbsent == false && (isCardAbsent == true    || !hasService()));
+-        boolean noNeedRefresh = isModemAssert && (!isVoiceStateIn) && (isCardAbsent == false);
+-        Log.d(TAG, "noNeedRefresh: " + noNeedRefresh);
++        boolean noNeedRefresh = mProxy.mIsModemAssert && !mIsVoiceStateIn;
+ 
+         if(noNeedRefresh){
+-            Log.d(TAG, "modem assert, not refresh view");
++            if(DEBUG){
++                Log.d(TAG, "modem assert, not refresh view");
++            }
+             ret = true;
+         } else {
+-            mIsCardAbsent= isCardAbsent;
+-            if (isModemAssert == false) {
+-                Log.d(TAG, "modem not assert, refresh view");
++            if (!mProxy.mIsModemAssert) {
++                mProxy.mIsModemAssert = false;
++                if(mProxy.mIsModemAlive ){
++                    if(!mIsVoiceStateIn || !mIsDataStateIn || mSignalStrength == null){
++                        return true;
++                    }else {
++                        if(mDataConnected && !isDataConnected){
++                            return true;
++                        }
++                    }
++                }
++                if(DEBUG){
++                    Log.d(TAG, "modem not assert, refresh view");
++                }
+                 return false;
+             }
+-            if (isVoiceStateIn && (mSignalStrength != null)) {
+-                isModemAssert = false;
+-                Log.d(TAG, "need refresh, isModemAssert: " + isModemAssert);
+-                ret = false;
++            if (mIsVoiceStateIn && mSignalStrength != null) {
++                if(!mProxy.mIsModemAssert){
++                    mProxy.mIsModemAssert = false;
++                    ret = false;
++                    if(DEBUG){
++                        Log.d(TAG, "voice in service and modem not assert, refresh view");
++                    }
++                } else {
++                    ret = true;
++                    if(DEBUG){
++                        Log.d(TAG," voice in service but modem assert, not refresh view");
++                    }
++                }
+             } else {
+-                Log.d(TAG, "wait refresh, mSignalStrength is null, isModemAssert: " + isModemAssert);
++                if(DEBUG){
++                    Log.d(TAG, "wait refresh, mSignalStrength is null, mIsModemAssert: " + mProxy.mIsModemAssert);
++                }
+                 ret = true;
+             }
+         }
+-        Log.d(TAG,"notNeedRefresh - ");
++        if(DEBUG){
++            Log.d(TAG,"notNeedRefresh - ");
++        }
+         return ret;
+     }
+ 
+@@ -1378,6 +1404,14 @@ public class NetworkControllerImplSprd extends BroadcastReceiver
+             Log.d(TAG, "silent reset: not refreshViews");
+             return;
+         }
++        if(!mProxy.mIsModemAssert && mProxy.mIsModemAlive){
++            if(DEBUG){
++                Log.d(TAG, "modem is alive, update singal and data");
++            }
++            updateTelephonySignalStrength();
++            updateDataNetType();
++            updateDataIcon();
++        }
+ 
+         if (!mHasMobileDataFeature) {
+             mDataSignalIconId = mPhoneSignalIconId = 0;
+@@ -1540,6 +1574,7 @@ public class NetworkControllerImplSprd extends BroadcastReceiver
+                 combinedSignalIconId = mDataSignalIconId;
+             }
+         } else if (!mPhone.hasIccCard(mPhoneId)) {
++            Log.d(TAG," -------test log----- Phone has no icccard!!! , mPhoneId = "+mPhoneId);
+ //            mPhoneSignalIconId = mDataSignalIconId = R.drawable.stat_sys_no_sim_sprd;
+             mQSPhoneSignalIconId = R.drawable.ic_qs_no_sim;
+             mDataTypeIconId = mQSDataTypeIconId = 0;
+@@ -1722,6 +1757,9 @@ public class NetworkControllerImplSprd extends BroadcastReceiver
+             StatusBarHeaderView v = mEmergencyViews.get(i);
+             v.setShowEmergencyCallsOnly(emergencyOnly);
+         }
++        //mIsModemAssert = false;
++        //mIsModemAlive = false;
++		mProxy.cleanupModemAssert();
+     }
+ 
+     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
