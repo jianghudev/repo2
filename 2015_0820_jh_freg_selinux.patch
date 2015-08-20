@@ -1,0 +1,53 @@
+diff --git a/scx35/sepolicy/file_contexts b/scx35/sepolicy/file_contexts
+index 31dbf07..6bc6a48 100644
+--- a/scx35/sepolicy/file_contexts
++++ b/scx35/sepolicy/file_contexts
+@@ -41,6 +41,7 @@
+ /dev/ttyGS[0-9]         u:object_r:serial_device:s0
+ /dev/stty_w[0-9]*       u:object_r:radio_device:s0
+ /dev/vser               u:object_r:serial_device:s0
++/dev/freg_file          u:object_r:radio_device:s0
+ 
+ /dev/sttybt0            u:object_r:hci_attach_dev:s0
+ 
+diff --git a/scx35/sepolicy/service_contexts b/scx35/sepolicy/service_contexts
+index 27f88ed..7f17aaa 100644
+--- a/scx35/sepolicy/service_contexts
++++ b/scx35/sepolicy/service_contexts
+@@ -5,3 +5,4 @@ sprd_phone                                u:object_r:radio_service:s0
+ security                                  u:object_r:system_server_service:s0
+ board_score                               u:object_r:system_server_service:s0
+ htctelephony                              u:object_r:radio_service:s0
++freg                                      u:object_r:system_server_service:s0
+diff --git a/scx35/sepolicy/system_server.te b/scx35/sepolicy/system_server.te
+index 0a124d2..10b3388 100644
+--- a/scx35/sepolicy/system_server.te
++++ b/scx35/sepolicy/system_server.te
+@@ -17,3 +17,6 @@ allow system_server bootanim_exec:file {execute read open execute_no_trans};
+ allow system_server default_prop:property_service set;
+ allow system_server cota_file:dir { write search add_name remove_name };
+ allow system_server cota_file:file { open create read write setattr getattr unlink };
++# allow system_server radio_device:chr_file {open read write};
++# allow system_server device:chr_file {open read write};
++
+diff --git a/scx35/ueventd.sc8830.rc b/scx35/ueventd.sc8830.rc
+index 66a8bbd..9b20eb3 100644
+--- a/scx35/ueventd.sc8830.rc
++++ b/scx35/ueventd.sc8830.rc
+@@ -82,6 +82,7 @@
+ /dev/sdiomux30          0660     media       audio
+ /dev/akm8963_dev        0660     system      system
+ 
++
+ /sys/devices/70700000.i2c/i2c-2/2-*                 enable         0660    input    system
+ /sys/devices/70700000.i2c/i2c-2/2-*                 delay          0660    input    system
+ /sys/devices/virtual/input/input*                   poll           0660    input    system
+diff --git a/scx35l/ueventd.sc8830.rc b/scx35l/ueventd.sc8830.rc
+index f82b54a..81a8aa7 100644
+--- a/scx35l/ueventd.sc8830.rc
++++ b/scx35l/ueventd.sc8830.rc
+@@ -94,3 +94,4 @@
+ /dev/sdiomux29          0660     media       audio
+ /dev/sdiomux30          0660     media       audio
+ /dev/akm8963_dev        0660     system      system
++/dev/freg_file          0666     root        root
