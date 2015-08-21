@@ -1,0 +1,46 @@
+diff --git a/scx35/sepolicy/device.te b/scx35/sepolicy/device.te
+index 82b691f..55846ba 100644
+--- a/scx35/sepolicy/device.te
++++ b/scx35/sepolicy/device.te
+@@ -4,7 +4,7 @@ type mmcblk_device, dev_type;
+ type refnotify_device, dev_type;
+ type nv_mmcblk_device, dev_type;
+ type efuse_device, dev_type;
+-
++type freg_device, dev_type;
+ # zram block device
+ type zram_block_device, dev_type;
+ 
+diff --git a/scx35/sepolicy/file_contexts b/scx35/sepolicy/file_contexts
+index 31dbf07..225b627 100644
+--- a/scx35/sepolicy/file_contexts
++++ b/scx35/sepolicy/file_contexts
+@@ -41,6 +41,7 @@
+ /dev/ttyGS[0-9]         u:object_r:serial_device:s0
+ /dev/stty_w[0-9]*       u:object_r:radio_device:s0
+ /dev/vser               u:object_r:serial_device:s0
++/dev/freg_file          u:object_r:freg_device:s0
+ 
+ /dev/sttybt0            u:object_r:hci_attach_dev:s0
+ 
+diff --git a/scx35/sepolicy/service_contexts b/scx35/sepolicy/service_contexts
+index 27f88ed..7f17aaa 100644
+--- a/scx35/sepolicy/service_contexts
++++ b/scx35/sepolicy/service_contexts
+@@ -5,3 +5,4 @@ sprd_phone                                u:object_r:radio_service:s0
+ security                                  u:object_r:system_server_service:s0
+ board_score                               u:object_r:system_server_service:s0
+ htctelephony                              u:object_r:radio_service:s0
++freg                                      u:object_r:system_server_service:s0
+diff --git a/scx35/sepolicy/system_server.te b/scx35/sepolicy/system_server.te
+index 0a124d2..83c2691 100644
+--- a/scx35/sepolicy/system_server.te
++++ b/scx35/sepolicy/system_server.te
+@@ -17,3 +17,7 @@ allow system_server bootanim_exec:file {execute read open execute_no_trans};
+ allow system_server default_prop:property_service set;
+ allow system_server cota_file:dir { write search add_name remove_name };
+ allow system_server cota_file:file { open create read write setattr getattr unlink };
++# allow system_server radio_device:chr_file {open read write};
++ allow system_server freg_device:chr_file {open read write};
++
++
